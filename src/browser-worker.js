@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { chromium } from "playwright-core";
-import { config } from "./config.js";
+import { config, publicConfig } from "./config.js";
 
 export class BrowserWorker {
   constructor(store) {
@@ -34,6 +34,8 @@ export class BrowserWorker {
       lastRequestAt: this.store.state.lastRequestAt,
       idleMs: config.browserIdleMs,
       remoteDisplay: this.remoteDisplay ? this.remoteDisplay.info() : null
+      ,
+      config: publicConfig()
     };
   }
 
@@ -87,7 +89,7 @@ export class BrowserWorker {
 
     await fs.mkdir(config.profileDir, { recursive: true });
     const headless = mode === "service" ? config.headlessService : false;
-    this.context = await chromium.launchPersistentContext(config.profileDir, {
+    const launchOptions = {
       channel: config.chromeChannel,
       headless,
       env: mode === "login" ? { ...process.env, DISPLAY: config.loginDisplay } : process.env,
@@ -99,7 +101,11 @@ export class BrowserWorker {
         "--no-first-run",
         "--no-default-browser-check"
       ]
-    });
+    };
+    const proxy = buildProxy();
+    if (proxy) launchOptions.proxy = proxy;
+
+    this.context = await chromium.launchPersistentContext(config.profileDir, launchOptions);
     this.context.on("close", () => {
       this.context = null;
       this.page = null;
@@ -151,6 +157,14 @@ export class BrowserWorker {
     this.busy = next.catch(() => {});
     return next;
   }
+}
+
+function buildProxy() {
+  if (!config.proxyServer) return null;
+  const proxy = { server: config.proxyServer };
+  if (config.proxyUsername) proxy.username = config.proxyUsername;
+  if (config.proxyPassword) proxy.password = config.proxyPassword;
+  return proxy;
 }
 
 async function sendPrompt(page, prompt) {

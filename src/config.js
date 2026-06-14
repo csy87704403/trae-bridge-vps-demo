@@ -17,6 +17,30 @@ export const config = {
   vncPort: Number(process.env.VNC_PORT || 5900),
   noVncPort: Number(process.env.NOVNC_PORT || 6080),
   noVncWebRoot: process.env.NOVNC_WEB_ROOT || "/usr/share/novnc",
+  proxyServer: process.env.PROXY_SERVER || "",
+  proxyUsername: process.env.PROXY_USERNAME || "",
+  proxyPassword: process.env.PROXY_PASSWORD || "",
   profileDir: path.join(root, "data", "profile"),
   stateFile: path.join(root, "data", "state.json")
 };
+
+export function publicConfig() {
+  return {
+    proxyEnabled: Boolean(config.proxyServer),
+    proxyServer: redactProxy(config.proxyServer)
+  };
+}
+
+function redactProxy(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) {
+      url.username = "***";
+      url.password = "***";
+    }
+    return url.toString();
+  } catch {
+    return value.replace(/\/\/([^:@/]+):([^@/]+)@/, "//***:***@");
+  }
+}

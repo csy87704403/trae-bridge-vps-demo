@@ -21,6 +21,15 @@ sudo apt install -y xvfb x11vnc novnc websockify
 
 Login mode starts `Xvfb + x11vnc + noVNC` only when requested. Open the noVNC URL shown in `/admin`, finish TRAE login, then stop login mode and use service mode.
 
+If the TRAE login dialog returns a region/risk `403`, route Chrome through a proxy:
+
+```env
+PROXY_SERVER=http://host:port
+# or socks5://host:port
+PROXY_USERNAME=
+PROXY_PASSWORD=
+```
+
 ## Shape
 
 - `/admin` small management UI
