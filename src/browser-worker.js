@@ -112,6 +112,122 @@ export class BrowserWorker {
     });
   }
 
+  async listModels() {
+    await this.ensureService();
+    await this.openTrae();
+    await this.page.waitForTimeout(1500);
+
+    const discovered = await this.page.evaluate(() => {
+      const models = new Map();
+      add("trae-auto", "TRAE Auto Model", "fallback");
+      collectFromText(document.body?.innerText || "", "page_text");
+      collectFromStorage(localStorage, "localStorage");
+      collectFromStorage(sessionStorage, "sessionStorage");
+      collectFromWindow();
+      return Array.from(models.values());
+
+      function add(id, name = id, source = "unknown") {
+        if (!id || typeof id !== "string") return;
+        const normalized = id.trim();
+        if (!normalized || normalized.length > 80) return;
+        const key = normalized.toLowerCase();
+        const prev = models.get(key);
+        if (prev) {
+          if (!prev.sources.includes(source)) prev.sources.push(source);
+          return;
+        }
+        models.set(key, {
+          id: normalized,
+          name: String(name || normalized).trim(),
+          sources: [source]
+        });
+      }
+
+      function collectFromText(text, source) {
+        const patterns = [
+          /TRAE Auto Model/g,
+          /\b(?:DeepSeek|Kimi|GLM|Qwen|Doubao|豆包|通义|Claude|GPT|Gemini|Moonshot)[A-Za-z0-9_.\- ]{0,40}/gi
+        ];
+        for (const pattern of patterns) {
+          for (const match of text.matchAll(pattern)) {
+            const raw = String(match[0]).replace(/\s+/g, " ").trim();
+            if (raw) add(toModelId(raw), raw, source);
+          }
+        }
+      }
+
+      function collectFromStorage(storage, source) {
+        for (let i = 0; i < storage.length; i += 1) {
+          const key = storage.key(i);
+          const value = storage.getItem(key);
+          if (!/model|provider|chat|agent|trae/i.test(`${key} ${value}`)) continue;
+          collectUnknown(value, `${source}:${key}`, 0);
+        }
+      }
+
+      function collectFromWindow() {
+        const keys = Object.keys(window).filter((key) => /model|provider|chat|trae|agent/i.test(key)).slice(0, 80);
+        for (const key of keys) {
+          collectUnknown(window[key], `window:${key}`, 0);
+        }
+      }
+
+      function collectUnknown(value, source, depth) {
+        if (depth > 4 || value == null) return;
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if ((trimmed.startsWith("{") || trimmed.startsWith("[")) && trimmed.length < 300000) {
+            try {
+              collectUnknown(JSON.parse(trimmed), source, depth + 1);
+              return;
+            } catch {}
+          }
+          collectFromText(trimmed, source);
+          return;
+        }
+        if (Array.isArray(value)) {
+          for (const item of value.slice(0, 200)) collectUnknown(item, source, depth + 1);
+          return;
+        }
+        if (typeof value !== "object") return;
+        const modelKeys = ["id", "name", "model", "model_name", "modelName", "config_name", "configName", "display_model_name", "displayModelName"];
+        const id = firstString(value, modelKeys);
+        const display = firstString(value, ["display_name", "displayName", "label", "title", "name", "display_model_name", "displayModelName"]);
+        if (id && looksLikeModel(id, display)) add(toModelId(id), display || id, source);
+        for (const [key, child] of Object.entries(value).slice(0, 200)) {
+          if (/token|cookie|jwt|authorization|secret|password/i.test(key)) continue;
+          if (/model|provider|chat|agent|trae|config|list|items/i.test(key)) collectUnknown(child, `${source}.${key}`, depth + 1);
+        }
+      }
+
+      function firstString(obj, keys) {
+        for (const key of keys) {
+          if (typeof obj?.[key] === "string" && obj[key].trim()) return obj[key].trim();
+        }
+        return "";
+      }
+
+      function looksLikeModel(id, display) {
+        const text = `${id} ${display || ""}`;
+        return /auto|model|deepseek|kimi|glm|qwen|doubao|豆包|通义|claude|gpt|gemini|moonshot/i.test(text);
+      }
+
+      function toModelId(name) {
+        if (/TRAE Auto Model/i.test(name)) return "trae-auto";
+        return name.trim().replace(/\s+/g, "-");
+      }
+    });
+
+    return discovered.map((model) => ({
+      id: model.id,
+      object: "model",
+      created: 0,
+      owned_by: "trae",
+      name: model.name,
+      sources: model.sources
+    }));
+  }
+
   async ensureService() {
     if (!this.context) await this.startService();
   }

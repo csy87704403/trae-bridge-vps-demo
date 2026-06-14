@@ -104,6 +104,7 @@
           <button id="startService">启动服务模式</button>
           <button class="secondary" id="stopBrowser">关闭浏览器</button>
           <button class="secondary" id="domSummary">页面摘要</button>
+          <button class="secondary" id="models">模型列表</button>
         </div>
         <p id="remoteLink" class="muted"></p>
       </section>
@@ -131,6 +132,7 @@
       document.querySelector("#startService").onclick = () => post("/admin/api/browser/start-service");
       document.querySelector("#stopBrowser").onclick = () => post("/admin/api/browser/stop");
       document.querySelector("#domSummary").onclick = () => get("/admin/api/dom-summary");
+      document.querySelector("#models").onclick = () => get("/admin/api/models");
       document.querySelector("#testChat").onclick = () => post("/admin/api/test-chat", {
         prompt: document.querySelector("#prompt").value
       });

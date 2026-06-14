@@ -27,11 +27,15 @@ app.get("/health", async (_req, res) => {
   res.json(await worker.status());
 });
 
-app.get("/v1/models", (_req, res) => {
-  res.json({
-    object: "list",
-    data: [{ id: "trae-auto", object: "model", created: 0, owned_by: "trae" }]
-  });
+app.get("/v1/models", async (_req, res) => {
+  try {
+    res.json({ object: "list", data: await worker.listModels() });
+  } catch {
+    res.json({
+      object: "list",
+      data: [{ id: "trae-auto", object: "model", created: 0, owned_by: "trae", name: "TRAE Auto Model" }]
+    });
+  }
 });
 
 app.post("/v1/chat/completions", async (req, res) => {
@@ -109,6 +113,15 @@ app.post("/admin/api/test-chat", requireAdmin, async (req, res) => {
 app.get("/admin/api/dom-summary", requireAdmin, async (_req, res) => {
   try {
     res.json(await worker.domSummary());
+  } catch (error) {
+    await store.patch({ lastError: String(error?.message || error) });
+    res.status(500).json({ ok: false, error: String(error?.message || error) });
+  }
+});
+
+app.get("/admin/api/models", requireAdmin, async (_req, res) => {
+  try {
+    res.json({ object: "list", data: await worker.listModels() });
   } catch (error) {
     await store.patch({ lastError: String(error?.message || error) });
     res.status(500).json({ ok: false, error: String(error?.message || error) });
