@@ -2,6 +2,14 @@ import fs from "node:fs/promises";
 import { chromium } from "playwright-core";
 import { config, publicConfig } from "./config.js";
 
+const BUILTIN_MODEL_ALLOWLIST = [
+  { id: "trae-auto", name: "TRAE Auto Model", aliases: ["TRAE Auto Model", "trae-auto"] },
+  { id: "Doubao-Seed-2.0-Code", name: "Doubao-Seed-2.0-Code", aliases: ["Doubao-Seed-2.0-Code"] },
+  { id: "Doubao-Seed-Code", name: "Doubao-Seed-Code", aliases: ["Doubao-Seed-Code", "Doubao_1_6"] },
+  { id: "MiniMax-M3", name: "MiniMax-M3", aliases: ["MiniMax-M3"] },
+  { id: "MiniMax-M2.7", name: "MiniMax-M2.7", aliases: ["MiniMax-M2.7"] }
+];
+
 export class BrowserWorker {
   constructor(store) {
     this.store = store;
@@ -218,7 +226,7 @@ export class BrowserWorker {
       }
     });
 
-    return discovered.map((model) => ({
+    return filterBuiltinModels(discovered).map((model) => ({
       id: model.id,
       object: "model",
       created: 0,
@@ -306,6 +314,27 @@ export class BrowserWorker {
     this.busy = next.catch(() => {});
     return next;
   }
+}
+
+function filterBuiltinModels(discovered) {
+  const discoveredText = discovered
+    .map((item) => `${item.id} ${item.name}`)
+    .join("\n")
+    .toLowerCase();
+
+  return BUILTIN_MODEL_ALLOWLIST.map((allowed) => {
+    const matched = discovered.find((item) =>
+      allowed.aliases.some((alias) =>
+        item.id.toLowerCase() === alias.toLowerCase() ||
+        item.name.toLowerCase() === alias.toLowerCase()
+      )
+    );
+    return {
+      id: allowed.id,
+      name: allowed.name,
+      sources: matched?.sources || (discoveredText.includes(allowed.name.toLowerCase()) ? ["page_text"] : ["builtin_allowlist"])
+    };
+  });
 }
 
 function buildProxy() {
