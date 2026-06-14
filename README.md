@@ -2,7 +2,7 @@
 
 Minimal low-memory bridge demo for testing a persistent TRAE web login profile on a VPS.
 
-## Run
+## Local Run
 
 ```powershell
 npm install
@@ -10,7 +10,24 @@ copy .env.example .env
 npm start
 ```
 
-Open `http://127.0.0.1:39280/admin`, enter `ADMIN_PASSWORD`, then start login mode.
+For local Windows/macOS validation, use:
+
+```env
+HOST=127.0.0.1
+PORT=39280
+REMOTE_DISPLAY=false
+HEADLESS_SERVICE=false
+```
+
+Open `http://127.0.0.1:39280/admin`, enter `ADMIN_PASSWORD`, then start login mode. A local Chrome window opens and saves login state in `data/profile/`.
+
+Run the adapter-only test:
+
+```powershell
+npm run test:adapter
+```
+
+## VPS Run
 
 On a headless VPS, install temporary login-mode dependencies:
 

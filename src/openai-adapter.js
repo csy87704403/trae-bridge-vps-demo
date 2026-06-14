@@ -1,9 +1,7 @@
 export function promptFromChat(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const tools = Array.isArray(body?.tools) ? body.tools : [];
-  const toolNames = tools
-    .map((tool) => tool?.function?.name || tool?.name)
-    .filter(Boolean);
+  const toolSpecs = tools.map(normalizeTool).filter(Boolean);
 
   const transcript = messages
     .map((message) => {
@@ -17,15 +15,15 @@ export function promptFromChat(body) {
     .filter(Boolean)
     .join("\n\n");
 
-  if (!toolNames.length) return transcript;
+  if (!toolSpecs.length) return transcript;
 
   return [
     transcript,
     "",
-    "Available tools from caller:",
-    toolNames.map((name) => `- ${name}`).join("\n"),
+    "Available tools from caller as JSON schema:",
+    JSON.stringify(toolSpecs, null, 2),
     "",
-    "If a tool is needed, reply with strict JSON only:",
+    "Use only tool names listed above. If a tool is needed, reply with strict JSON only:",
     '{"type":"tool_call","tool_calls":[{"id":"call_xxx","name":"tool_name","arguments":{}}]}',
     "If no tool is needed, reply with strict JSON only:",
     '{"type":"final","content":"answer"}'
@@ -140,6 +138,16 @@ function normalizeContent(content) {
     .map((part) => (typeof part === "string" ? part : part?.text || part?.data?.content || ""))
     .filter(Boolean)
     .join("\n");
+}
+
+function normalizeTool(tool) {
+  const fn = tool?.function || tool;
+  if (!fn?.name) return null;
+  return {
+    name: fn.name,
+    description: fn.description || "",
+    parameters: fn.parameters || { type: "object", properties: {} }
+  };
 }
 
 function split(text) {

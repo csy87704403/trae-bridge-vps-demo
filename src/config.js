@@ -13,6 +13,7 @@ export const config = {
   chromeChannel: process.env.CHROME_CHANNEL || "chrome",
   browserIdleMs: Number(process.env.BROWSER_IDLE_MS || 300000),
   headlessService: String(process.env.HEADLESS_SERVICE || "true") !== "false",
+  remoteDisplay: process.env.REMOTE_DISPLAY || "auto",
   loginDisplay: process.env.LOGIN_DISPLAY || ":99",
   vncPort: Number(process.env.VNC_PORT || 5900),
   noVncPort: Number(process.env.NOVNC_PORT || 6080),
@@ -24,8 +25,16 @@ export const config = {
   stateFile: path.join(root, "data", "state.json")
 };
 
+export function shouldUseRemoteDisplay() {
+  if (config.remoteDisplay === "true") return true;
+  if (config.remoteDisplay === "false") return false;
+  return process.platform !== "win32" && process.platform !== "darwin";
+}
+
 export function publicConfig() {
   return {
+    remoteDisplay: config.remoteDisplay,
+    remoteDisplayEnabled: shouldUseRemoteDisplay(),
     proxyEnabled: Boolean(config.proxyServer),
     proxyServer: redactProxy(config.proxyServer)
   };
