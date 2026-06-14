@@ -104,6 +104,7 @@
           <button id="startService">启动服务模式</button>
           <button class="secondary" id="stopBrowser">关闭浏览器</button>
         </div>
+        <p id="remoteLink" class="muted"></p>
       </section>
       <section>
         <textarea id="prompt">回复 ok，并说明当前是否可以对话。</textarea>
@@ -134,7 +135,7 @@
 
       async function status() {
         const res = await fetch("/admin/api/status", { headers: authHeaders() });
-        write(await res.json());
+        show(await res.json());
       }
 
       async function post(url, body = {}) {
@@ -144,7 +145,7 @@
           headers: { "content-type": "application/json", ...authHeaders() },
           body: JSON.stringify(body)
         });
-        write(await res.json());
+        show(await res.json());
       }
 
       function authHeaders() {
@@ -153,6 +154,17 @@
 
       function write(value) {
         output.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+      }
+
+      function show(value) {
+        const remote = document.querySelector("#remoteLink");
+        if (value && value.remoteDisplay && value.remoteDisplay.running) {
+          const url = `${location.protocol}//${location.hostname}:${value.remoteDisplay.noVncPort}/vnc.html?host=${location.hostname}&port=${value.remoteDisplay.noVncPort}&autoconnect=1&resize=scale`;
+          remote.innerHTML = `远程登录窗口：<a href="${url}" target="_blank" rel="noreferrer">${url}</a>`;
+        } else {
+          remote.textContent = "";
+        }
+        write(value);
       }
 
       status().catch((error) => write(String(error)));

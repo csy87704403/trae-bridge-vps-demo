@@ -3,12 +3,14 @@ import path from "node:path";
 import { config } from "./config.js";
 import { StateStore } from "./state-store.js";
 import { BrowserWorker } from "./browser-worker.js";
+import { RemoteDisplay } from "./remote-display.js";
 import { completionResponse, promptFromChat, streamResponse } from "./openai-adapter.js";
 
 const app = express();
 const store = new StateStore();
 await store.load();
 const worker = new BrowserWorker(store);
+worker.remoteDisplay = new RemoteDisplay();
 
 app.use(express.json({ limit: "3mb" }));
 app.use("/public", express.static(path.join(config.root, "public")));

@@ -12,6 +12,15 @@ npm start
 
 Open `http://127.0.0.1:39280/admin`, enter `ADMIN_PASSWORD`, then start login mode.
 
+On a headless VPS, install temporary login-mode dependencies:
+
+```bash
+sudo apt update
+sudo apt install -y xvfb x11vnc novnc websockify
+```
+
+Login mode starts `Xvfb + x11vnc + noVNC` only when requested. Open the noVNC URL shown in `/admin`, finish TRAE login, then stop login mode and use service mode.
+
 ## Shape
 
 - `/admin` small management UI

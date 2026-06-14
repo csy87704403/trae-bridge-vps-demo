@@ -13,6 +13,10 @@ export const config = {
   chromeChannel: process.env.CHROME_CHANNEL || "chrome",
   browserIdleMs: Number(process.env.BROWSER_IDLE_MS || 300000),
   headlessService: String(process.env.HEADLESS_SERVICE || "true") !== "false",
+  loginDisplay: process.env.LOGIN_DISPLAY || ":99",
+  vncPort: Number(process.env.VNC_PORT || 5900),
+  noVncPort: Number(process.env.NOVNC_PORT || 6080),
+  noVncWebRoot: process.env.NOVNC_WEB_ROOT || "/usr/share/novnc",
   profileDir: path.join(root, "data", "profile"),
   stateFile: path.join(root, "data", "state.json")
 };

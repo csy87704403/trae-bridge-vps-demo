@@ -5,6 +5,7 @@ import { config } from "./config.js";
 export class BrowserWorker {
   constructor(store) {
     this.store = store;
+    this.remoteDisplay = null;
     this.context = null;
     this.page = null;
     this.mode = "stopped";
@@ -31,11 +32,13 @@ export class BrowserWorker {
       profileDir: config.profileDir,
       lastError: this.store.state.lastError,
       lastRequestAt: this.store.state.lastRequestAt,
-      idleMs: config.browserIdleMs
+      idleMs: config.browserIdleMs,
+      remoteDisplay: this.remoteDisplay ? this.remoteDisplay.info() : null
     };
   }
 
   async startLogin() {
+    if (this.remoteDisplay) await this.remoteDisplay.start();
     await this.start("login");
     await this.openTrae();
     return this.status();
@@ -50,10 +53,12 @@ export class BrowserWorker {
 
   async stop() {
     this.clearIdleTimer();
+    const oldMode = this.mode;
     if (this.context) await this.context.close().catch(() => {});
     this.context = null;
     this.page = null;
     this.mode = "stopped";
+    if (oldMode === "login" && this.remoteDisplay) await this.remoteDisplay.stop();
     await this.store.patch({ mode: "stopped", currentUrl: "", lastError: "" });
     return this.status();
   }
@@ -85,6 +90,7 @@ export class BrowserWorker {
     this.context = await chromium.launchPersistentContext(config.profileDir, {
       channel: config.chromeChannel,
       headless,
+      env: mode === "login" ? { ...process.env, DISPLAY: config.loginDisplay } : process.env,
       viewport: { width: 1280, height: 900 },
       locale: "zh-CN",
       timezoneId: "Asia/Shanghai",
