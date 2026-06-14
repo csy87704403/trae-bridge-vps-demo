@@ -106,6 +106,15 @@ app.post("/admin/api/test-chat", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/admin/api/dom-summary", requireAdmin, async (_req, res) => {
+  try {
+    res.json(await worker.domSummary());
+  } catch (error) {
+    await store.patch({ lastError: String(error?.message || error) });
+    res.status(500).json({ ok: false, error: String(error?.message || error) });
+  }
+});
+
 function requireAdmin(req, res, next) {
   const password = req.get("x-admin-password") || req.query.password || "";
   if (config.adminPassword !== "change-me" && password !== config.adminPassword) {

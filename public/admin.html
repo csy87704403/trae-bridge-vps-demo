@@ -103,6 +103,7 @@
           <button id="startLogin">启动登录模式</button>
           <button id="startService">启动服务模式</button>
           <button class="secondary" id="stopBrowser">关闭浏览器</button>
+          <button class="secondary" id="domSummary">页面摘要</button>
         </div>
         <p id="remoteLink" class="muted"></p>
       </section>
@@ -129,6 +130,7 @@
       document.querySelector("#startLogin").onclick = () => post("/admin/api/browser/start-login");
       document.querySelector("#startService").onclick = () => post("/admin/api/browser/start-service");
       document.querySelector("#stopBrowser").onclick = () => post("/admin/api/browser/stop");
+      document.querySelector("#domSummary").onclick = () => get("/admin/api/dom-summary");
       document.querySelector("#testChat").onclick = () => post("/admin/api/test-chat", {
         prompt: document.querySelector("#prompt").value
       });
@@ -145,6 +147,12 @@
           headers: { "content-type": "application/json", ...authHeaders() },
           body: JSON.stringify(body)
         });
+        show(await res.json());
+      }
+
+      async function get(url) {
+        write("running...");
+        const res = await fetch(url, { headers: authHeaders() });
         show(await res.json());
       }
 
