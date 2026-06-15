@@ -54,6 +54,12 @@ assert.doesNotMatch(compactPrompt, /y{500}/);
 
 const response = completionResponse({
   model: "trae-auto",
+  tools: [
+    {
+      type: "function",
+      function: { name: "read_file" }
+    }
+  ],
   content: JSON.stringify({
     type: "tool_call",
     tool_calls: [
@@ -69,5 +75,29 @@ const response = completionResponse({
 assert.equal(response.choices[0].finish_reason, "tool_calls");
 assert.equal(response.choices[0].message.tool_calls[0].function.name, "read_file");
 assert.equal(response.choices[0].message.tool_calls[0].function.arguments, "{\"path\":\"package.json\"}");
+
+const unsupportedResponse = completionResponse({
+  model: "trae-auto",
+  tools: [
+    {
+      type: "function",
+      function: { name: "read_file" }
+    }
+  ],
+  content: JSON.stringify({
+    type: "tool_call",
+    tool_calls: [
+      {
+        id: "call_bad",
+        name: "get_weather",
+        arguments: { city: "Hangzhou" }
+      }
+    ]
+  })
+});
+
+assert.equal(unsupportedResponse.choices[0].finish_reason, "stop");
+assert.equal(unsupportedResponse.choices[0].message.tool_calls, undefined);
+assert.match(unsupportedResponse.choices[0].message.content, /get_weather/);
 
 console.log("adapter ok");

@@ -70,7 +70,7 @@ export class BrowserWorker {
       await this.ensureService();
       await this.store.patch({ lastRequestAt: new Date().toISOString() });
       const page = this.page;
-      await this.openTrae();
+      await this.openTrae({ fresh: config.freshSessionPerRequest });
       const before = await getPageText(page);
       await sendPrompt(page, prompt);
       await waitForStableAnswerCompat(page, prompt, before);
@@ -269,9 +269,9 @@ export class BrowserWorker {
     });
   }
 
-  async openTrae() {
+  async openTrae(options = {}) {
     if (!this.page) throw new Error("Browser is not running");
-    if (!this.page.url().startsWith(config.traeUrl)) {
+    if (options.fresh || !this.page.url().startsWith(config.traeUrl)) {
       await this.page.goto(config.traeUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     }
     await this.page.waitForLoadState("domcontentloaded", { timeout: 30000 }).catch(() => {});

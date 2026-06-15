@@ -13,6 +13,7 @@ export const config = {
   chromeChannel: process.env.CHROME_CHANNEL || "chrome",
   browserIdleMs: Number(process.env.BROWSER_IDLE_MS || 300000),
   responseTimeoutMs: Number(process.env.RESPONSE_TIMEOUT_MS || 120000),
+  freshSessionPerRequest: String(process.env.FRESH_SESSION_PER_REQUEST || "true") !== "false",
   headlessService: String(process.env.HEADLESS_SERVICE || "true") !== "false",
   remoteDisplay: process.env.REMOTE_DISPLAY || "auto",
   loginDisplay: process.env.LOGIN_DISPLAY || ":99",
@@ -36,6 +37,7 @@ export function publicConfig() {
   return {
     remoteDisplay: config.remoteDisplay,
     remoteDisplayEnabled: shouldUseRemoteDisplay(),
+    freshSessionPerRequest: config.freshSessionPerRequest,
     proxyEnabled: Boolean(config.proxyServer),
     proxyServer: redactProxy(config.proxyServer)
   };

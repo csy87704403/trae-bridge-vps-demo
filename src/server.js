@@ -48,10 +48,10 @@ app.post("/v1/chat/completions", async (req, res) => {
     }
     const result = await worker.chat(prompt);
     if (req.body?.stream) {
-      streamResponse(res, { model, content: result.text });
+      streamResponse(res, { model, content: result.text, tools: req.body?.tools });
       return;
     }
-    res.json(completionResponse({ model, content: result.text }));
+    res.json(completionResponse({ model, content: result.text, tools: req.body?.tools }));
   } catch (error) {
     await store.patch({ lastError: String(error?.message || error) });
     res.status(502).json({

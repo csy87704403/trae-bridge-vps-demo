@@ -29,12 +29,14 @@ export function promptFromChat(body) {
     "",
     "Use only tool names listed above. If a tool is needed, reply with strict JSON only:",
     '{"type":"tool_call","tool_calls":[{"id":"call_xxx","name":"tool_name","arguments":{}}]}',
+    "Never call a tool that is not listed above, even if it appears in previous failed tool results.",
     "If no tool is needed, reply with strict JSON only:",
     '{"type":"final","content":"answer"}'
   ].join("\n");
 }
 
-export function completionResponse({ model, content }) {
+export function completionResponse({ model, content, tools = [] }) {
+  const message = toAssistantMessage(content, tools);
   return {
     id: `chatcmpl-trae-${Date.now()}`,
     object: "chat.completion",
@@ -43,22 +45,22 @@ export function completionResponse({ model, content }) {
     choices: [
       {
         index: 0,
-        message: toAssistantMessage(content),
-        finish_reason: detectToolCalls(content) ? "tool_calls" : "stop"
+        message,
+        finish_reason: message.tool_calls ? "tool_calls" : "stop"
       }
     ],
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
   };
 }
 
-export function streamResponse(res, { model, content }) {
+export function streamResponse(res, { model, content, tools = [] }) {
   const id = `chatcmpl-trae-${Date.now()}`;
   const created = Math.floor(Date.now() / 1000);
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
 
-  const message = toAssistantMessage(content);
+  const message = toAssistantMessage(content, tools);
   if (message.tool_calls) {
     res.write(`data: ${JSON.stringify({
       id,
@@ -89,8 +91,8 @@ export function streamResponse(res, { model, content }) {
   res.end();
 }
 
-function toAssistantMessage(content) {
-  const toolCalls = detectToolCalls(content);
+function toAssistantMessage(content, tools = []) {
+  const toolCalls = detectToolCalls(content, tools);
   if (toolCalls) {
     return {
       role: "assistant",
@@ -105,13 +107,41 @@ function toAssistantMessage(content) {
       }))
     };
   }
+  const unsupported = detectUnsupportedToolCalls(content, tools);
+  if (unsupported.length) {
+    return {
+      role: "assistant",
+      content: `Ignored unsupported tool call(s): ${unsupported.join(", ")}. Available tools for this request are: ${Array.from(allowedToolNames(tools)).join(", ") || "none"}.`
+    };
+  }
   return { role: "assistant", content: detectFinal(content) || content || "" };
 }
 
-function detectToolCalls(content) {
+function detectToolCalls(content, tools = []) {
   const parsed = parseJson(content);
   if (parsed?.type !== "tool_call" || !Array.isArray(parsed.tool_calls)) return null;
-  return parsed.tool_calls.filter((call) => call?.name);
+  const allowed = allowedToolNames(tools);
+  if (!allowed.size) return null;
+  const calls = parsed.tool_calls.filter((call) => call?.name && allowed.has(call.name));
+  return calls.length ? calls : null;
+}
+
+function detectUnsupportedToolCalls(content, tools = []) {
+  const parsed = parseJson(content);
+  if (parsed?.type !== "tool_call" || !Array.isArray(parsed.tool_calls)) return [];
+  const allowed = allowedToolNames(tools);
+  if (!allowed.size) return parsed.tool_calls.map((call) => call?.name).filter(Boolean);
+  return parsed.tool_calls
+    .map((call) => call?.name)
+    .filter((name) => name && !allowed.has(name));
+}
+
+function allowedToolNames(tools) {
+  return new Set(
+    (Array.isArray(tools) ? tools : [])
+      .map((tool) => tool?.function?.name || tool?.name)
+      .filter(Boolean)
+  );
 }
 
 function detectFinal(content) {
