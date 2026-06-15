@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { completionResponse, promptFromChat } from "../src/openai-adapter.js";
+import { completionResponse, promptFromChat, toolsFromChat } from "../src/openai-adapter.js";
 
 const prompt = promptFromChat({
   messages: [
@@ -124,5 +124,36 @@ const looseToolResponse = completionResponse({
 
 assert.equal(looseToolResponse.choices[0].finish_reason, "tool_calls");
 assert.equal(looseToolResponse.choices[0].message.tool_calls[0].function.name, "bash");
+
+const inlineBody = {
+  messages: [
+    {
+      role: "user",
+      content: [
+        "system: You are Reasonix",
+        "user: Create 1.txt on the Desktop",
+        "",
+        "Available tools from caller as JSON schema:",
+        JSON.stringify([
+          {
+            name: "bash",
+            description: "Run a shell command",
+            parameters: {
+              type: "object",
+              properties: { command: { type: "string" } },
+              required: ["command"]
+            }
+          }
+        ], null, 2)
+      ].join("\n")
+    }
+  ]
+};
+
+assert.deepEqual(toolsFromChat(inlineBody).map((tool) => tool.name), ["bash"]);
+const inlinePrompt = promptFromChat(inlineBody);
+assert.match(inlinePrompt, /TOOL-CALL CONTRACT/);
+assert.match(inlinePrompt, /Current user request:\nCreate 1.txt on the Desktop/);
+assert.doesNotMatch(inlinePrompt, /system: You are Reasonix[\s\S]*Available tools from caller/);
 
 console.log("adapter ok");

@@ -4,19 +4,21 @@ const MAX_SCHEMA_DEPTH = 3;
 
 export function promptFromChat(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
-  const tools = Array.isArray(body?.tools) ? body.tools : [];
+  const tools = toolsFromChat(body);
   const toolSpecs = tools.map(normalizeTool).filter(Boolean);
+  const hasInlineTools = messages.some((message) => normalizeContent(message.content).includes("Available tools from caller as JSON schema:"));
   const latestUser = [...messages]
     .reverse()
     .find((message) => message?.role === "user")?.content;
-  const latestUserText = normalizeContent(latestUser);
+  const latestUserText = extractLatestUserRequest(stripInlineToolSchema(normalizeContent(latestUser)));
   const actionRequired = needsToolCall(latestUserText);
   const preferredTools = preferredToolNames(toolSpecs);
 
   const transcript = messages
     .map((message) => {
       const role = message.role || "user";
-      const content = normalizeContent(message.content);
+      const rawContent = stripInlineToolSchema(normalizeContent(message.content));
+      const content = hasInlineTools ? extractLatestUserRequest(rawContent) : rawContent;
       if (role === "tool") {
         return `tool_result(${message.tool_call_id || "unknown"}): ${content}`;
       }
@@ -73,6 +75,18 @@ export function promptFromChat(body) {
     latestUserText || "(none)",
     "Return exactly one JSON object now."
   ].join("\n");
+}
+
+export function toolsFromChat(body) {
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  const directTools = Array.isArray(body?.tools) ? body.tools : [];
+  const inlineTools = extractInlineTools(messages);
+  const merged = new Map();
+  for (const tool of [...directTools, ...inlineTools]) {
+    const normalized = normalizeTool(tool);
+    if (normalized?.name && !merged.has(normalized.name)) merged.set(normalized.name, normalized);
+  }
+  return Array.from(merged.values());
 }
 
 export function completionResponse({ model, content, tools = [] }) {
@@ -249,6 +263,77 @@ function parseJson(content) {
       return null;
     }
   }
+}
+
+function extractInlineTools(messages) {
+  const tools = [];
+  for (const message of messages) {
+    const content = normalizeContent(message.content);
+    for (const jsonText of findInlineToolJsonArrays(content)) {
+      try {
+        const parsed = JSON.parse(jsonText);
+        if (Array.isArray(parsed)) tools.push(...parsed);
+      } catch {}
+    }
+  }
+  return tools;
+}
+
+function stripInlineToolSchema(content) {
+  if (!content || typeof content !== "string") return "";
+  const marker = "Available tools from caller as JSON schema:";
+  const index = content.indexOf(marker);
+  if (index < 0) return content;
+  return content.slice(0, index).trim();
+}
+
+function extractLatestUserRequest(content) {
+  const text = String(content || "").trim();
+  const matches = Array.from(text.matchAll(/(?:^|\n)\s*user:\s*([\s\S]*?)(?=\n\s*(?:system|assistant|tool_result)\s*:|\n\s*\[loop guard\]|$)/gi));
+  const last = matches.at(-1)?.[1]?.trim();
+  return last || text;
+}
+
+function findInlineToolJsonArrays(content) {
+  const marker = "Available tools from caller as JSON schema:";
+  const out = [];
+  let searchFrom = 0;
+  while (searchFrom < content.length) {
+    const markerIndex = content.indexOf(marker, searchFrom);
+    if (markerIndex < 0) break;
+    const arrayStart = content.indexOf("[", markerIndex + marker.length);
+    if (arrayStart < 0) break;
+    const arrayEnd = findBalancedEnd(content, arrayStart, "[", "]");
+    if (arrayEnd < 0) break;
+    out.push(content.slice(arrayStart, arrayEnd + 1));
+    searchFrom = arrayEnd + 1;
+  }
+  return out;
+}
+
+function findBalancedEnd(text, start, openChar, closeChar) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let pos = start; pos < text.length; pos += 1) {
+    const ch = text[pos];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') inString = !inString;
+    if (inString) continue;
+    if (ch === openChar) depth += 1;
+    if (ch === closeChar) {
+      depth -= 1;
+      if (depth === 0) return pos;
+    }
+  }
+  return -1;
 }
 
 function normalizeContent(content) {

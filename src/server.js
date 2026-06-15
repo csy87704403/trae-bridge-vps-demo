@@ -5,7 +5,7 @@ import { shouldUseRemoteDisplay } from "./config.js";
 import { StateStore } from "./state-store.js";
 import { BrowserWorker } from "./browser-worker.js";
 import { RemoteDisplay } from "./remote-display.js";
-import { completionResponse, promptFromChat, streamResponse } from "./openai-adapter.js";
+import { completionResponse, promptFromChat, streamResponse, toolsFromChat } from "./openai-adapter.js";
 
 const app = express();
 const store = new StateStore();
@@ -42,16 +42,17 @@ app.post("/v1/chat/completions", async (req, res) => {
   try {
     const model = req.body?.model || "trae-auto";
     const prompt = promptFromChat(req.body);
+    const tools = toolsFromChat(req.body);
     if (!prompt.trim()) {
       res.status(400).json({ error: { message: "messages is required" } });
       return;
     }
     const result = await worker.chat(prompt);
     if (req.body?.stream) {
-      streamResponse(res, { model, content: result.text, tools: req.body?.tools });
+      streamResponse(res, { model, content: result.text, tools });
       return;
     }
-    res.json(completionResponse({ model, content: result.text, tools: req.body?.tools }));
+    res.json(completionResponse({ model, content: result.text, tools }));
   } catch (error) {
     await store.patch({ lastError: String(error?.message || error) });
     res.status(502).json({
