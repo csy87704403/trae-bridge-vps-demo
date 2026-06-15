@@ -398,13 +398,9 @@ async function getCompletedAnswerFromTailCompat(page, before = "") {
       .filter((line) => !/^(\u4efb\u52a1\u8017\u65f6|\u601d\u8003\u8fc7\u7a0b|\u4efb\u52a1\u5b8c\u6210|\u5f85\u529e|\u6682\u65e0\u5f85\u529e|\u4efb\u52a1\u4ea7\u7269|\u6682\u65e0\u4ea7\u7269|\u53c2\u8003\u4fe1\u606f|\u53d1\u9001|\u8bed\u97f3\u8f93\u5165|\u8bed\u97f3\u8ba8\u8bba)$/i.test(line))
       .filter((line) => !/\u590d\u6742\u4efb\u52a1\u7684\u8fdb\u5c55|\u4efb\u52a1\u5b8c\u6210\u540e|\u4efb\u52a1\u6267\u884c\u8fc7\u7a0b\u4e2d/.test(line));
 
-    const useful = [];
-    for (const line of lines) {
-      if (/^\{[\s\S]*"type"\s*:/.test(line)) return line;
-      if (line.length > 1) useful.push(line);
-      if (useful.length >= 4) break;
-    }
-    return useful.join("\n").trim();
+    const jsonLine = lines.find((line) => /^\{[\s\S]*"type"\s*:/.test(line));
+    if (jsonLine) return jsonLine;
+    return lines.join("\n").trim().slice(0, 12000);
   }, before);
 }
 
