@@ -25,6 +25,32 @@ const prompt = promptFromChat({
 assert.match(prompt, /Available tools/);
 assert.match(prompt, /read_file/);
 assert.match(prompt, /tool_result\(call_1\): ok/);
+assert.ok(prompt.length < 1200);
+
+const compactPrompt = promptFromChat({
+  messages: [{ role: "user", content: "hi" }],
+  tools: [
+    {
+      type: "function",
+      function: {
+        name: "ask",
+        description: "x".repeat(1000),
+        parameters: {
+          type: "object",
+          properties: {
+            question: { type: "string", description: "y".repeat(1000) }
+          },
+          required: ["question"]
+        }
+      }
+    }
+  ]
+});
+
+assert.match(compactPrompt, /ask/);
+assert.ok(compactPrompt.length < 1200);
+assert.doesNotMatch(compactPrompt, /x{500}/);
+assert.doesNotMatch(compactPrompt, /y{500}/);
 
 const response = completionResponse({
   model: "trae-auto",

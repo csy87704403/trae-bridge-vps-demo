@@ -1,3 +1,7 @@
+const MAX_TOOL_DESCRIPTION = 220;
+const MAX_PROPERTY_DESCRIPTION = 120;
+const MAX_SCHEMA_DEPTH = 3;
+
 export function promptFromChat(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const tools = Array.isArray(body?.tools) ? body.tools : [];
@@ -145,9 +149,31 @@ function normalizeTool(tool) {
   if (!fn?.name) return null;
   return {
     name: fn.name,
-    description: fn.description || "",
-    parameters: fn.parameters || { type: "object", properties: {} }
+    description: truncate(fn.description || "", MAX_TOOL_DESCRIPTION),
+    parameters: compactSchema(fn.parameters || { type: "object", properties: {} })
   };
+}
+
+function compactSchema(schema, depth = 0) {
+  if (!schema || typeof schema !== "object" || depth > MAX_SCHEMA_DEPTH) return {};
+  const out = {};
+  if (schema.type) out.type = schema.type;
+  if (schema.description) out.description = truncate(schema.description, MAX_PROPERTY_DESCRIPTION);
+  if (Array.isArray(schema.enum)) out.enum = schema.enum.slice(0, 30);
+  if (Array.isArray(schema.required)) out.required = schema.required.slice(0, 50);
+  if (schema.items) out.items = compactSchema(schema.items, depth + 1);
+  if (schema.properties && typeof schema.properties === "object") {
+    out.properties = {};
+    for (const [key, value] of Object.entries(schema.properties).slice(0, 80)) {
+      out.properties[key] = compactSchema(value, depth + 1);
+    }
+  }
+  return out;
+}
+
+function truncate(value, max) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
 function split(text) {

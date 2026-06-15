@@ -73,8 +73,8 @@ export class BrowserWorker {
       await this.openTrae();
       const before = await getPageText(page);
       await sendPrompt(page, prompt);
-      await waitForStableAnswer(page, prompt);
-      const text = await getFinalAgentAnswer(page, prompt) || await getJsonAnswerFromPage(page, prompt) || await getLatestAgentAnswer(page) || extractDelta(before, await getPageText(page));
+      await waitForStableAnswerCompat(page, prompt, before);
+      const text = await getFinalAgentAnswer(page, prompt) || await getJsonAnswerFromPage(page, prompt) || await getCompletedAnswerFromTailCompat(page, before) || await getLatestAgentAnswer(page) || extractDelta(before, await getPageText(page));
       this.armIdleTimer();
       return { text };
     });
@@ -356,14 +356,14 @@ async function getPageText(page) {
   return await page.evaluate(() => document.body.innerText || "");
 }
 
-async function waitForStableAnswer(page, prompt) {
-  const deadline = Date.now() + 120000;
+async function waitForStableAnswerCompat(page, prompt, before = "") {
+  const deadline = Date.now() + config.responseTimeoutMs;
   let last = "";
   let stableCount = 0;
   while (Date.now() < deadline) {
     const answer = await getFinalAgentAnswer(page, prompt);
-    const jsonAnswer = answer || await getJsonAnswerFromPage(page, prompt);
-    if (jsonAnswer && !/Thinking|Generating|Stop generating|思考中|停止/i.test(jsonAnswer)) {
+    const jsonAnswer = answer || await getJsonAnswerFromPage(page, prompt) || await getCompletedAnswerFromTailCompat(page, before);
+    if (jsonAnswer && !/Thinking|Generating|Stop generating|\u601d\u8003\u4e2d|\u505c\u6b62/i.test(jsonAnswer)) {
       if (jsonAnswer === last) stableCount += 1;
       else stableCount = 0;
       last = jsonAnswer;
@@ -372,6 +372,40 @@ async function waitForStableAnswer(page, prompt) {
     await page.waitForTimeout(1200);
   }
   throw new Error("Timed out waiting for TRAE response");
+}
+
+async function getCompletedAnswerFromTailCompat(page, before = "") {
+  return await page.evaluate((before) => {
+    const body = document.body?.innerText || "";
+    const beforeTail = before ? before.slice(-1000) : "";
+    const beforeIndex = beforeTail ? body.lastIndexOf(beforeTail) : -1;
+    let tail = beforeIndex >= 0 ? body.slice(beforeIndex + beforeTail.length) : body.slice(-12000);
+    if (tail.length < 50) tail = body.slice(-12000);
+    const donePattern = /(?:^|\n)\s*(?:\u4efb\u52a1\u5b8c\u6210|Task completed)\s*(?:\n|$)/i;
+    if (!donePattern.test(tail)) return "";
+
+    const markerIndex = tail.lastIndexOf("TRAE Work");
+    const scoped = markerIndex >= 0 ? tail.slice(markerIndex) : tail;
+    const doneIndex = scoped.search(donePattern);
+    const answerBlock = doneIndex >= 0 ? scoped.slice(0, doneIndex) : scoped;
+    const lines = answerBlock
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^(TRAE Work|TRAE|Work|Code|TRAE Auto Model)$/i.test(line))
+      .filter((line) => !/^\d{1,2}:\d{2}$/.test(line))
+      .filter((line) => !/^\d+\s*s$/i.test(line))
+      .filter((line) => !/^(\u4efb\u52a1\u8017\u65f6|\u601d\u8003\u8fc7\u7a0b|\u4efb\u52a1\u5b8c\u6210|\u5f85\u529e|\u6682\u65e0\u5f85\u529e|\u4efb\u52a1\u4ea7\u7269|\u6682\u65e0\u4ea7\u7269|\u53c2\u8003\u4fe1\u606f|\u53d1\u9001|\u8bed\u97f3\u8f93\u5165|\u8bed\u97f3\u8ba8\u8bba)$/i.test(line))
+      .filter((line) => !/\u590d\u6742\u4efb\u52a1\u7684\u8fdb\u5c55|\u4efb\u52a1\u5b8c\u6210\u540e|\u4efb\u52a1\u6267\u884c\u8fc7\u7a0b\u4e2d/.test(line));
+
+    const useful = [];
+    for (const line of lines) {
+      if (/^\{[\s\S]*"type"\s*:/.test(line)) return line;
+      if (line.length > 1) useful.push(line);
+      if (useful.length >= 4) break;
+    }
+    return useful.join("\n").trim();
+  }, before);
 }
 
 async function getJsonAnswerFromPage(page, prompt = "") {

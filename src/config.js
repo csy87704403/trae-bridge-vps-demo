@@ -12,6 +12,7 @@ export const config = {
   traeUrl: process.env.TRAE_URL || "https://work.trae.cn/",
   chromeChannel: process.env.CHROME_CHANNEL || "chrome",
   browserIdleMs: Number(process.env.BROWSER_IDLE_MS || 300000),
+  responseTimeoutMs: Number(process.env.RESPONSE_TIMEOUT_MS || 120000),
   headlessService: String(process.env.HEADLESS_SERVICE || "true") !== "false",
   remoteDisplay: process.env.REMOTE_DISPLAY || "auto",
   loginDisplay: process.env.LOGIN_DISPLAY || ":99",
