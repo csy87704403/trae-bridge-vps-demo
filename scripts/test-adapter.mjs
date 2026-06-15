@@ -25,7 +25,7 @@ const prompt = promptFromChat({
 assert.match(prompt, /Available tools/);
 assert.match(prompt, /read_file/);
 assert.match(prompt, /tool_result\(call_1\): ok/);
-assert.ok(prompt.length < 1200);
+assert.ok(prompt.length < 2200);
 
 const compactPrompt = promptFromChat({
   messages: [{ role: "user", content: "hi" }],
@@ -48,7 +48,7 @@ const compactPrompt = promptFromChat({
 });
 
 assert.match(compactPrompt, /ask/);
-assert.ok(compactPrompt.length < 1200);
+assert.ok(compactPrompt.length < 2200);
 assert.doesNotMatch(compactPrompt, /x{500}/);
 assert.doesNotMatch(compactPrompt, /y{500}/);
 
@@ -99,5 +99,30 @@ const unsupportedResponse = completionResponse({
 assert.equal(unsupportedResponse.choices[0].finish_reason, "stop");
 assert.equal(unsupportedResponse.choices[0].message.tool_calls, undefined);
 assert.match(unsupportedResponse.choices[0].message.content, /get_weather/);
+
+const answerResponse = completionResponse({
+  model: "trae-auto",
+  content: 'JSON 1 2 3 { "answer": "hello\\nworld" }'
+});
+
+assert.equal(answerResponse.choices[0].finish_reason, "stop");
+assert.equal(answerResponse.choices[0].message.content, "hello\nworld");
+
+const looseToolResponse = completionResponse({
+  model: "trae-auto",
+  tools: [
+    {
+      type: "function",
+      function: { name: "bash" }
+    }
+  ],
+  content: JSON.stringify({
+    name: "bash",
+    arguments: { command: "echo hi" }
+  })
+});
+
+assert.equal(looseToolResponse.choices[0].finish_reason, "tool_calls");
+assert.equal(looseToolResponse.choices[0].message.tool_calls[0].function.name, "bash");
 
 console.log("adapter ok");

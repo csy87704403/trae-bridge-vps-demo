@@ -6,6 +6,12 @@ export function promptFromChat(body) {
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const tools = Array.isArray(body?.tools) ? body.tools : [];
   const toolSpecs = tools.map(normalizeTool).filter(Boolean);
+  const latestUser = [...messages]
+    .reverse()
+    .find((message) => message?.role === "user")?.content;
+  const latestUserText = normalizeContent(latestUser);
+  const actionRequired = needsToolCall(latestUserText);
+  const preferredTools = preferredToolNames(toolSpecs);
 
   const transcript = messages
     .map((message) => {
@@ -21,17 +27,51 @@ export function promptFromChat(body) {
 
   if (!toolSpecs.length) return transcript;
 
+  if (actionRequired) {
+    return [
+      "TRAE BRIDGE TOOL-CALL CONTRACT:",
+      "The caller can only consume an OpenAI-style tool call JSON object.",
+      "The current user request requires using a caller-provided tool. A final answer is invalid for this request.",
+      "Your entire response MUST be exactly one JSON object. Do not write Markdown, explanations, code fences, or prose outside JSON.",
+      preferredTools.length ? `Prefer these listed tools when appropriate: ${preferredTools.join(", ")}.` : "",
+      "",
+      "Conversation:",
+      transcript,
+      "",
+      "Available tools from caller as JSON schema:",
+      JSON.stringify(toolSpecs, null, 2),
+      "",
+      "Return one tool_call JSON object now. The tool name must be one of the listed tools. Arguments must be real values for the current user request.",
+      "JSON keys to use: type, tool_calls, id, name, arguments.",
+      "",
+      "Current user request:",
+      latestUserText || "(none)"
+    ].filter(Boolean).join("\n");
+  }
+
   return [
+    "TRAE BRIDGE OUTPUT CONTRACT:",
+    "You are an OpenAI-compatible tool-call planner behind a bridge. The caller can only consume JSON.",
+    "Your entire response MUST be exactly one JSON object. Do not write Markdown, explanations, or prose outside JSON.",
+    "If the user asks for an action that needs local files, shell commands, browser automation, project inspection, external APIs, or any caller-provided capability, call a listed tool instead of describing that you can do it.",
+    "Action verbs such as read, open, list, search, run, write, edit, create, delete, inspect, analyze the project, or use a tool usually require a tool_call.",
+    "If no tool is needed, return a final JSON answer.",
+    "Never copy placeholder values such as call_xxx, tool_name, arguments, or answer. Replace them with real values.",
+    "",
+    "Conversation:",
     transcript,
     "",
     "Available tools from caller as JSON schema:",
     JSON.stringify(toolSpecs, null, 2),
     "",
-    "Use only tool names listed above. If a tool is needed, reply with strict JSON only:",
-    '{"type":"tool_call","tool_calls":[{"id":"call_xxx","name":"tool_name","arguments":{}}]}',
+    "Tool-call JSON shape:",
+    '{"type":"tool_call","tool_calls":[{"id":"call_001","name":"one_listed_tool_name","arguments":{"arg":"value"}}]}',
     "Never call a tool that is not listed above, even if it appears in previous failed tool results.",
-    "If no tool is needed, reply with strict JSON only:",
-    '{"type":"final","content":"answer"}'
+    "For final answers, use JSON keys type=final and content=<your actual answer text>.",
+    "",
+    "Current user request:",
+    latestUserText || "(none)",
+    "Return exactly one JSON object now."
   ].join("\n");
 }
 
@@ -114,24 +154,26 @@ function toAssistantMessage(content, tools = []) {
       content: `Ignored unsupported tool call(s): ${unsupported.join(", ")}. Available tools for this request are: ${Array.from(allowedToolNames(tools)).join(", ") || "none"}.`
     };
   }
-  return { role: "assistant", content: detectFinal(content) || content || "" };
+  return { role: "assistant", content: detectFinal(content) || cleanupAssistantText(content) || "" };
 }
 
 function detectToolCalls(content, tools = []) {
   const parsed = parseJson(content);
-  if (parsed?.type !== "tool_call" || !Array.isArray(parsed.tool_calls)) return null;
+  const rawCalls = normalizeParsedToolCalls(parsed);
+  if (!rawCalls.length) return null;
   const allowed = allowedToolNames(tools);
   if (!allowed.size) return null;
-  const calls = parsed.tool_calls.filter((call) => call?.name && allowed.has(call.name));
+  const calls = rawCalls.filter((call) => call?.name && allowed.has(call.name));
   return calls.length ? calls : null;
 }
 
 function detectUnsupportedToolCalls(content, tools = []) {
   const parsed = parseJson(content);
-  if (parsed?.type !== "tool_call" || !Array.isArray(parsed.tool_calls)) return [];
+  const rawCalls = normalizeParsedToolCalls(parsed);
+  if (!rawCalls.length) return [];
   const allowed = allowedToolNames(tools);
-  if (!allowed.size) return parsed.tool_calls.map((call) => call?.name).filter(Boolean);
-  return parsed.tool_calls
+  if (!allowed.size) return rawCalls.map((call) => call?.name).filter(Boolean);
+  return rawCalls
     .map((call) => call?.name)
     .filter((name) => name && !allowed.has(name));
 }
@@ -146,7 +188,51 @@ function allowedToolNames(tools) {
 
 function detectFinal(content) {
   const parsed = parseJson(content);
-  return parsed?.type === "final" && typeof parsed.content === "string" ? parsed.content : "";
+  if (parsed?.type === "final" && typeof parsed.content === "string") return parsed.content;
+  if (typeof parsed?.answer === "string") return parsed.answer;
+  if (typeof parsed?.content === "string" && !parsed?.tool_calls) return parsed.content;
+  if (typeof parsed?.message === "string" && !parsed?.tool_calls) return parsed.message;
+  return "";
+}
+
+function normalizeParsedToolCalls(parsed) {
+  if (!parsed || typeof parsed !== "object") return [];
+  if (Array.isArray(parsed.tool_calls)) {
+    return parsed.tool_calls.map(normalizeParsedToolCall).filter(Boolean);
+  }
+  if (parsed.tool_call) {
+    const call = normalizeParsedToolCall(parsed.tool_call);
+    return call ? [call] : [];
+  }
+  if (parsed.function_call) {
+    const call = normalizeParsedToolCall(parsed.function_call);
+    return call ? [call] : [];
+  }
+  if (parsed.name || parsed.tool || parsed.function) {
+    const call = normalizeParsedToolCall(parsed);
+    return call ? [call] : [];
+  }
+  return [];
+}
+
+function normalizeParsedToolCall(call) {
+  if (!call || typeof call !== "object") return null;
+  const name = call.name || call.tool || call.function?.name;
+  if (!name) return null;
+  return {
+    id: call.id,
+    name,
+    arguments: call.arguments || call.args || call.function?.arguments || {}
+  };
+}
+
+function cleanupAssistantText(content) {
+  if (!content || typeof content !== "string") return "";
+  return content
+    .replace(/^```(?:json|JSON)?\s*/i, "")
+    .replace(/```$/i, "")
+    .replace(/^JSON\s+(?:\d+\s*)+/i, "")
+    .trim();
 }
 
 function parseJson(content) {
@@ -182,6 +268,17 @@ function normalizeTool(tool) {
     description: truncate(fn.description || "", MAX_TOOL_DESCRIPTION),
     parameters: compactSchema(fn.parameters || { type: "object", properties: {} })
   };
+}
+
+function needsToolCall(text) {
+  return /read|open|list|search|run|write|edit|create|delete|inspect|analy[sz]e|file|shell|command|browser|tool|读取|打开|列出|搜索|运行|执行|写入|修改|编辑|创建|新建|删除|检查|分析|文件|桌面|命令|工具/i.test(text || "");
+}
+
+function preferredToolNames(toolSpecs) {
+  return toolSpecs
+    .map((tool) => tool.name)
+    .filter((name) => /bash|shell|command|powershell|edit|write|file|create|run/i.test(name))
+    .slice(0, 8);
 }
 
 function compactSchema(schema, depth = 0) {
