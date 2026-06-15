@@ -74,7 +74,7 @@ export class BrowserWorker {
       const before = await getPageText(page);
       await sendPrompt(page, prompt);
       await waitForStableAnswerCompat(page, prompt, before);
-      const text = await getFinalAgentAnswer(page, prompt) || await getJsonAnswerFromPage(page, prompt) || await getCompletedAnswerFromTailCompat(page, before) || await getLatestAgentAnswer(page) || extractDelta(before, await getPageText(page));
+      const text = await getFinalAgentAnswer(page, prompt) || await getJsonAnswerFromPage(page, prompt) || await getCompletedAnswerFromTailCompat(page, before) || await getTerminalNoticeFromTailCompat(page, before) || await getLatestAgentAnswer(page) || extractDelta(before, await getPageText(page));
       this.armIdleTimer();
       return { text };
     });
@@ -362,7 +362,7 @@ async function waitForStableAnswerCompat(page, prompt, before = "") {
   let stableCount = 0;
   while (Date.now() < deadline) {
     const answer = await getFinalAgentAnswer(page, prompt);
-    const jsonAnswer = answer || await getJsonAnswerFromPage(page, prompt) || await getCompletedAnswerFromTailCompat(page, before);
+    const jsonAnswer = answer || await getJsonAnswerFromPage(page, prompt) || await getCompletedAnswerFromTailCompat(page, before) || await getTerminalNoticeFromTailCompat(page, before);
     if (jsonAnswer && !/Thinking|Generating|Stop generating|\u601d\u8003\u4e2d|\u505c\u6b62/i.test(jsonAnswer)) {
       if (jsonAnswer === last) stableCount += 1;
       else stableCount = 0;
@@ -401,6 +401,30 @@ async function getCompletedAnswerFromTailCompat(page, before = "") {
     const jsonLine = lines.find((line) => /^\{[\s\S]*"type"\s*:/.test(line));
     if (jsonLine) return jsonLine;
     return lines.join("\n").trim().slice(0, 12000);
+  }, before);
+}
+
+async function getTerminalNoticeFromTailCompat(page, before = "") {
+  return await page.evaluate((before) => {
+    const body = document.body?.innerText || "";
+    const beforeTail = before ? before.slice(-1000) : "";
+    const beforeIndex = beforeTail ? body.lastIndexOf(beforeTail) : -1;
+    let tail = beforeIndex >= 0 ? body.slice(beforeIndex + beforeTail.length) : body.slice(-12000);
+    if (tail.length < 50) tail = body.slice(-12000);
+    const terminalPattern = /\u4eca\u65e5\u5bf9\u8bdd\u989d\u5ea6\u5df2\u8017\u5c3d|\u5f02\u5e38\u6253\u65ad|quota|limit exhausted/i;
+    if (!terminalPattern.test(tail)) return "";
+
+    const markerIndex = tail.lastIndexOf("TRAE Work");
+    const scoped = markerIndex >= 0 ? tail.slice(markerIndex) : tail;
+    const lines = scoped
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^(TRAE Work|TRAE|Work|Code|TRAE Auto Model|\u901f\u901a|\u5347\u7ea7\u6743\u76ca)$/i.test(line))
+      .filter((line) => !/^\d{1,2}:\d{2}$/.test(line))
+      .filter((line) => !/^(\u5f85\u529e|\u6682\u65e0\u5f85\u529e|\u4efb\u52a1\u4ea7\u7269|\u6682\u65e0\u4ea7\u7269|\u53c2\u8003\u4fe1\u606f|\u53d1\u9001|\u8bed\u97f3\u8f93\u5165|\u8bed\u97f3\u8ba8\u8bba)$/i.test(line))
+      .filter((line) => !/\u590d\u6742\u4efb\u52a1\u7684\u8fdb\u5c55|\u4efb\u52a1\u5b8c\u6210\u540e|\u4efb\u52a1\u6267\u884c\u8fc7\u7a0b\u4e2d/.test(line));
+    return lines.slice(0, 4).join("\n").trim();
   }, before);
 }
 

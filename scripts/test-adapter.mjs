@@ -154,6 +154,8 @@ assert.deepEqual(toolsFromChat(inlineBody).map((tool) => tool.name), ["bash"]);
 const inlinePrompt = promptFromChat(inlineBody);
 assert.match(inlinePrompt, /TOOL-CALL CONTRACT/);
 assert.match(inlinePrompt, /Current user request:\nCreate 1.txt on the Desktop/);
+assert.match(inlinePrompt, /local machine/);
+assert.match(inlinePrompt, /\$env:USERPROFILE\\Desktop/);
 assert.doesNotMatch(inlinePrompt, /system: You are Reasonix[\s\S]*Available tools from caller/);
 
 console.log("adapter ok");

@@ -35,6 +35,8 @@ export function promptFromChat(body) {
       "The caller can only consume an OpenAI-style tool call JSON object.",
       "The current user request requires using a caller-provided tool. A final answer is invalid for this request.",
       "Your entire response MUST be exactly one JSON object. Do not write Markdown, explanations, code fences, or prose outside JSON.",
+      "Caller-provided tools run on the user's local machine through the third-party agent, not inside TRAE web. Do not claim you cannot access the user's desktop; request a tool_call.",
+      "For Windows Desktop paths, use the local user's desktop path, for example $env:USERPROFILE\\Desktop or [Environment]::GetFolderPath('Desktop') when using PowerShell.",
       preferredTools.length ? `Prefer these listed tools when appropriate: ${preferredTools.join(", ")}.` : "",
       "",
       "Conversation:",
@@ -356,7 +358,7 @@ function normalizeTool(tool) {
 }
 
 function needsToolCall(text) {
-  return /read|open|list|search|run|write|edit|create|delete|inspect|analy[sz]e|file|shell|command|browser|tool|读取|打开|列出|搜索|运行|执行|写入|修改|编辑|创建|新建|删除|检查|分析|文件|桌面|命令|工具/i.test(text || "");
+  return /read|open|list|search|run|write|edit|create|delete|inspect|analy[sz]e|file|shell|command|browser|tool|\u8bfb\u53d6|\u6253\u5f00|\u5217\u51fa|\u641c\u7d22|\u8fd0\u884c|\u6267\u884c|\u5199\u5165|\u4fee\u6539|\u7f16\u8f91|\u521b\u5efa|\u65b0\u5efa|\u5220\u9664|\u68c0\u67e5|\u5206\u6790|\u6587\u4ef6|\u684c\u9762|\u547d\u4ee4|\u5de5\u5177/i.test(text || "");
 }
 
 function preferredToolNames(toolSpecs) {

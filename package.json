@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test:adapter": "node scripts/test-adapter.mjs"
+    "test:adapter": "node scripts/test-adapter.mjs",
+    "bench:latency": "node scripts/bench-latency.mjs"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
